@@ -1,5 +1,34 @@
 # chanfana
 
+## 3.6.0
+
+### Minor Changes
+
+- [#386](https://github.com/cloudflare/chanfana/pull/386) [`43307ee`](https://github.com/cloudflare/chanfana/commit/43307ee2c14749a08d4c254a947de228ea98b4ce) Thanks [@G4brym](https://github.com/G4brym)! - Preserve Hono RPC route types in `fromHono()`. Routes chained on the Hono router now infer their `hc` client input (`param`, `query`, `header`, `json`) and per-status JSON output (typed as serialized JSON, like `c.json()`) from the endpoint's `schema`, so `hc<typeof routes>` from `hono/client` is fully typed. Nested routers mounted with `.route()` also keep their route types. Type-only change, no runtime behavior changes.
+
+- [#384](https://github.com/cloudflare/chanfana/pull/384) [`b5edbda`](https://github.com/cloudflare/chanfana/commit/b5edbdae0866511afc5fb715e01e97da60f76a8d) Thanks [@G4brym](https://github.com/G4brym)! - Stop treating `ZodError`s thrown from `handle()` as request validation errors ([#166](https://github.com/cloudflare/chanfana/issues/166)).
+  
+  Previously, any `z.ZodError` thrown inside `handle()` (for example from parsing a database row or an upstream response with Zod) was turned into a `400` response with code `7001`, exposing internal schema details as if the client had sent an invalid request. Now only request-validation `ZodError`s (`getValidatedData()` / `validateRequest()`) are automatically converted into `400` / `7001` responses; explicitly thrown chanfana exceptions (such as `InputValidationException`, including the D1 constraint mappings) are unchanged. Any other `ZodError` is treated like an unknown error: chanfana re-throws it to the router (itty-router's `catch`, or Hono's `onError` as a raw `ZodError` instead of an `HTTPException`), which typically returns a `500`. Note that itty-router's default `AutoRouter` `catch` still includes the error message in its `500` body; use a custom `catch` if you need to hide it. The exported `formatChanfanaError()` helper now returns `null` for a raw `ZodError`. Request validation responses are unchanged.
+  
+  To keep the old behavior for a route, convert the error yourself, either where you parse or in the `handleError()` hook:
+  
+  ```ts
+  import { InputValidationException, MultiException } from "chanfana";
+  
+  protected handleError(error: unknown): unknown {
+    if (error instanceof z.ZodError) {
+      return new MultiException(
+        error.issues.map((issue) => new InputValidationException(issue.message, issue.path.map(String))),
+      );
+    }
+    return error;
+  }
+  ```
+
+### Patch Changes
+
+- [#382](https://github.com/cloudflare/chanfana/pull/382) [`53b09ec`](https://github.com/cloudflare/chanfana/commit/53b09ec1fd8af88a98e30dbd2d9ac61ce076b603) Thanks [@kwy404](https://github.com/kwy404)! - Coerce each item of array query, path and header parameters with the array element type, so schemas like `z.number().array()` or `z.array(z.boolean())` accept `?ids=1&ids=2` instead of failing with "expected number, received string". Array elements declared with `z.coerce.*` or `.catch()` now get the same pre-coercion as scalar parameters, for example `z.array(z.coerce.boolean())` reads `false` as `false`, and `z.coerce.number().array()` rejects hex, binary and blank items like scalar `z.coerce.number()` already does.
+
 ## 3.5.0
 
 ### Minor Changes
